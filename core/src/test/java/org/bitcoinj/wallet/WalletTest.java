@@ -17,27 +17,8 @@
 
 package org.bitcoinj.wallet;
 
+import org.bitcoinj.core.*;
 import org.bitcoinj.core.listeners.TransactionConfidenceEventListener;
-import org.bitcoinj.core.AbstractBlockChain;
-import org.bitcoinj.core.Address;
-import org.bitcoinj.core.Block;
-import org.bitcoinj.core.BlockChain;
-import org.bitcoinj.core.Coin;
-import org.bitcoinj.core.ECKey;
-import org.bitcoinj.core.InsufficientMoneyException;
-import org.bitcoinj.core.LegacyAddress;
-import org.bitcoinj.core.PeerAddress;
-import org.bitcoinj.core.SegwitAddress;
-import org.bitcoinj.core.Sha256Hash;
-import org.bitcoinj.core.StoredBlock;
-import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.TransactionConfidence;
-import org.bitcoinj.core.TransactionInput;
-import org.bitcoinj.core.TransactionOutPoint;
-import org.bitcoinj.core.TransactionOutput;
-import org.bitcoinj.core.TransactionWitness;
-import org.bitcoinj.core.Utils;
-import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.core.TransactionConfidence.ConfidenceType;
 import org.bitcoinj.crypto.*;
 import org.bitcoinj.script.Script;
@@ -57,6 +38,7 @@ import org.bitcoinj.wallet.listeners.KeyChainEventListener;
 import org.bitcoinj.wallet.listeners.WalletChangeEventListener;
 import org.bitcoinj.wallet.listeners.WalletCoinsReceivedEventListener;
 import org.bitcoinj.wallet.listeners.WalletCoinsSentEventListener;
+import org.bouncycastle.util.encoders.Hex;
 import org.easymock.EasyMock;
 
 import com.google.common.collect.ImmutableList;
@@ -3567,5 +3549,18 @@ public class WalletTest extends TestWithWallet {
         assertNotSame(txW2, tx1);
         assertEquals(txW1, txW2);
         assertNotSame(txW1, txW2);
+    }
+    @Test
+    public void testSignLocalTransaction(){
+        String rawTx = "0200000001f5d496b50827815316e3b15f54c7d970d031ef6024e7e609972ebf44c08c1c130000000000fdffffff0240420f0000000000160014b8d5dda99143f7493608c54cf50f27e457f08439c0943f2901000000160014adf9a9852767c94457cf50052cb110b9338cd0f900000000";
+        Transaction t1 = new Transaction(NetworkParameters.fromID(NetworkParameters.ID_TESTNET), Hex.decode(rawTx));
+        String wif_private = "cSXrBnbkSNqMQCDz1X4FYVHBgf285gLYagWsh1KDLHVT9XWtbiuW";
+        byte [] wif = Base58.decodeChecked(wif_private);
+        ECKey key = ECKey.fromPrivate(Arrays.copyOfRange(wif, 1, wif.length-1), true);
+        Script s = ScriptBuilder.createP2WPKHOutputScript(key);
+        Wallet.signLocalTransaction(t1, Arrays.asList(key), Arrays.asList(s));
+        byte [] serial_tx = t1.bitcoinSerialize();
+        String encoded_tx = Hex.toHexString(serial_tx);
+        System.out.println(encoded_tx);
     }
 }

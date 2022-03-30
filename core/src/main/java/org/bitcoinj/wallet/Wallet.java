@@ -945,7 +945,7 @@ public class Wallet extends BaseTaggableObject
     /**
      * Returns whether this wallet consists entirely of watching keys (unencrypted keys with no private part). Mixed
      * wallets are forbidden.
-     * 
+     *
      * @throws IllegalStateException
      *             if there are no keys, or if there is a mix between watching and non-watching keys.
      */
@@ -4248,6 +4248,65 @@ public class Wallet extends BaseTaggableObject
             lock.unlock();
         }
     }
+    /**
+     * <p>Given a send request containing transaction, attempts to sign it's inputs. This method expects transaction
+     * to have all necessary inputs connected or they will be ignored.</p>
+     * <p>Actual signing is done by pluggable {@link #signers} and it's not guaranteed that
+     * transaction will be complete in the end.</p>
+     * @throws BadWalletEncryptionKeyException if the supplied {@link SendRequest#aesKey} is wrong.
+     */
+    public static void signLocalTransaction(Transaction tx, List<ECKey> keys, List<Script> scripts) throws BadWalletEncryptionKeyException {
+        //lock.lock();
+        try {
+            //Transaction tx = req.tx;
+            List<TransactionInput> inputs = tx.getInputs();
+            List<TransactionOutput> outputs = tx.getOutputs();
+            checkState(inputs.size() > 0);
+            checkState(outputs.size() > 0);
+
+            //KeyBag maybeDecryptingKeyBag = new DecryptingKeyBag(this, req.aesKey);
+
+            int numInputs = tx.getInputs().size();
+            for (int i = 0; i < numInputs; i++) {
+                TransactionInput txIn = tx.getInput(i);
+                //TransactionOutput connectedOutput = txIn.getConnectedOutput();
+                //if (connectedOutput == null) {
+                //    // Missing connected output, assuming already signed.
+                //    continue;
+                //}
+                Script scriptPubKey = scripts.get(i);
+
+                //try {
+                //    // We assume if its already signed, its hopefully got a SIGHASH type that will not invalidate when
+                //    // we sign missing pieces (to check this would require either assuming any signatures are signing
+                //    // standard output types or a way to get processed signatures out of script execution)
+                //    txIn.getScriptSig().correctlySpends(tx, i, txIn.getWitness(), connectedOutput.getValue(),
+                //            connectedOutput.getScriptPubKey(), Script.ALL_VERIFY_FLAGS);
+                //    log.warn("Input {} already correctly spends output, assuming SIGHASH type used will be safe and skipping signing.", i);
+                //    continue;
+                //} catch (ScriptException e) {
+                //    log.debug("Input contained an incorrect signature", e);
+                //    // Expected.
+                //}
+
+                RedeemData redeemData = RedeemData.of(ECKey.fromPrivate(keys.get(i).getPrivKey()), scripts.get(i));
+                //checkNotNull(redeemData, "Transaction exists in wallet that we cannot redeem: %s", txIn.getOutpoint().getHash());
+                txIn.setScriptSig(scriptPubKey.createEmptyInputScript(redeemData.keys.get(0), redeemData.redeemScript));
+                txIn.setWitness(scriptPubKey.createEmptyWitness(redeemData.keys.get(0)));
+            }
+
+            TransactionSigner.ProposedTransaction proposal = new TransactionSigner.ProposedTransaction(tx);
+
+            LocalTransactionSigner.signInputsOffline(proposal, keys, scripts);
+
+            // resolve missing sigs if any
+            //new MissingSigResolutionSigner(req.missingSigsMode).signInputs(proposal, maybeDecryptingKeyBag);
+        } catch (KeyCrypterException.InvalidCipherText | KeyCrypterException.PublicPrivateMismatch e) {
+            throw new BadWalletEncryptionKeyException(e);
+        } finally {
+            //lock.unlock();
+        }
+    }
 
     /**
      * <p>Given a send request containing transaction, attempts to sign it's inputs. This method expects transaction
@@ -4815,10 +4874,10 @@ public class Wallet extends BaseTaggableObject
      * <p>Gets a bloom filter that contains all of the public keys from this wallet, and which will provide the given
      * false-positive rate if it has size elements. Keep in mind that you will get 2 elements in the bloom filter for
      * each key in the wallet, for the public key and the hash of the public key (address form).</p>
-     * 
+     *
      * <p>This is used to generate a BloomFilter which can be {@link BloomFilter#merge(BloomFilter)}d with another.
      * It could also be used if you have a specific target for the filter's size.</p>
-     * 
+     *
      * <p>See the docs for {@link BloomFilter#BloomFilter(int, double, long, BloomFilter.BloomUpdate)} for a brief explanation of anonymity when using bloom
      * filters.</p>
      */
@@ -5216,7 +5275,7 @@ public class Wallet extends BaseTaggableObject
      * believed to be compromised. The rotation time is persisted to the wallet. You can stop key rotation by calling
      * this method again with {@code 0} as the argument.
      * </p>
-     * 
+     *
      * <p>
      * Once set up, calling {@link #doMaintenance(KeyParameter, boolean)} will create and possibly send rotation
      * transactions: but it won't be done automatically (because you might have to ask for the users password). This may
